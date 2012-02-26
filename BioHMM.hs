@@ -7,12 +7,15 @@ import HMM
    
 bpList = "AGCT"
 
-   -- | bpCP enumerates the cross product of all the base pairs.  This is used to initialize the states for our HMM
+DNA = "ACAAGATGCCATTGTCCCCCGGCCTCCTGCTGCTGCTGCTCTCCGGGGCCACGGCCACCGCTGCCCTGCCCCTGGAGGGTGGCCCCACCGGCCGAGACAGCGAGCATATGCAGGAAGCGGCAGGAATAAGGAAAAGCAGCCTCCTGACTTTCCTCGCTTGGTGGTTTGAGTGGACCTCCCAGGCCAGTGCCGGGCCCCTCATAGGAGAGGAAGCTCGGGAGGTGGCCAGGCGGCAGGAAGGCGCACCCCCCCAGCAATCCGCGCGCCGGGACAGAATGCCCTGCAGGAACTTCTTCTGGAAGACCTTCTCCTCCTGCAAATAAAACCTCACCCATGAATGCTCACGCAAGTTTAATTACAGACCTGAA"
+
+   -- | enumerates the cross product of the language order number of times.  This is used to initialize the states for our HMM
    
-bpCP :: Int -> [String]
-bpCP x = bpCP' x [[]]
+-- enumerateStates :: a -> Int -> [[a]]
+enumerateStates :: String -> Int -> [String]
+enumerateStates language order = enumerateStates' order [[]]
     where
-        bpCP' :: Int -> [String] -> [String]
-        bpCP' x list
-            | x == 0    = list
-            | otherwise = bpCP' (x-1) [bp:l | l <- list, bp <- bpList]
+        enumerateStates' :: Int -> [String] -> [String]
+        enumerateStates' order list
+            | order == 0    = list
+            | otherwise     = enumerateStates' (order-1) [symbol:l | l <- list, symbol <- language]
