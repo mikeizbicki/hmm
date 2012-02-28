@@ -95,6 +95,39 @@ betaList hmm obs@(x:xs) state
                           ]
 
 
+   -- | Baum-Welch
+   
+gammaArray :: (Eq eventType, Show eventType) => HMM stateType eventType
+                                             -> Array Int eventType
+                                             -> Int
+                                             -> stateType
+                                             -> Prob
+gammaArray hmm obs t state = (alphaArray hmm obs t state)
+                            *(betaArray hmm obs t state)
+                            /(backwardArray hmm obs)
+   
+   -- xi i j = P(state (t-1) == i && state (t) == j | obs, lambda)
+   
+xiArray :: (Eq eventType, Show eventType) => HMM stateType eventType 
+                                          -> Array Int eventType 
+                                          -> Int 
+                                          -> stateType 
+                                          -> stateType 
+                                          -> Prob
+xiArray hmm obs t state1 state2 = (alphaArray hmm obs (t-1) state1)
+                                 *(transMatrix hmm state1 state2)
+                                 *(outMatrix hmm state2 $ obs!t)
+                                 *(betaArray hmm obs t state2)
+                                 /(backwardArray hmm obs)
+
+baumWelchItr :: HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
+baumWelchItr hmm obs = HMM { states = states hmm
+                           , events = events hmm
+                           , initProbs = initProbs hmm
+                           , transMatrix = transMatrix hmm
+                           , outMatrix = outMatrix hmm
+                           }
+
    -- | utility functions
    --
    -- | takes the cross product of a list multiple times
