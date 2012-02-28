@@ -120,14 +120,28 @@ xiArray hmm obs t state1 state2 = (alphaArray hmm obs (t-1) state1)
                                  *(betaArray hmm obs t state2)
                                  /(backwardArray hmm obs)
 
-baumWelchItr :: HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
+baumWelch :: (Eq eventType, Show eventType) => HMM stateType eventType -> Array Int eventType -> Int -> HMM stateType eventType
+baumWelch hmm obs count
+    | count == 0    = hmm
+    | otherwise     = baumWelch (baumWelchItr hmm obs) obs (count-1)
+
+baumWelchItr :: (Eq eventType, Show eventType) => HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
 baumWelchItr hmm obs = HMM { states = states hmm
                            , events = events hmm
-                           , initProbs = initProbs hmm
-                           , transMatrix = transMatrix hmm
-                           , outMatrix = outMatrix hmm
+                           , initProbs = newInitProbs
+                           , transMatrix = newTransMatrix
+                           , outMatrix = newOutMatrix
                            }
-
+                               where newInitProbs state = gammaArray hmm obs 1 state
+                                     newTransMatrix state1 state2 = sum [xiArray hmm obs t state1 state2 | t <- [2..(snd $ bounds obs)]]
+                                                                   /sum [gammaArray hmm obs t state1 | t <- [2..(snd $ bounds obs)]]
+                                     newOutMatrix state event = sum [if (obs!t == event) 
+                                                                        then gammaArray hmm obs t state 
+                                                                        else 0
+                                                                    | t <- [2..(snd $ bounds obs)]
+                                                                    ]
+                                                               /sum [gammaArray hmm obs t state | t <- [2..(snd $ bounds obs)]]
+                              
    -- | utility functions
    --
    -- | takes the cross product of a list multiple times
@@ -161,7 +175,10 @@ simpleHMM = HMM { states=[1,2]
                 , transMatrix = tmTest
                 , outMatrix = omTest
                 }
-                
+
+-- ipTest :: Array Int Prob
+-- ipTest = listArray (1,2) [0.1,0.9]
+
 ipTest s
     | s == 1  = 0.1
     | s == 2  = 0.9
