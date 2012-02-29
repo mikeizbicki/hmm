@@ -1,8 +1,10 @@
 module HMM2
     where
 
+import Debug.Trace
 import Data.Array
 import Data.Number.LogFloat
+import qualified Data.MemoCombinators as Memo
 
 type Prob = LogFloat
 
@@ -44,9 +46,26 @@ forwardArray hmm obs = sum [alphaArray hmm (listArray (1,bT) obs) bT state | sta
 alphaArray :: (Eq eventType) => HMM stateType eventType -> Array Int eventType -> Int -> stateType -> Prob
 alphaArray hmm obs t state
     | t == 1        = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
-    | otherwise     = (outMatrix hmm state $ obs!t)*(sum [(alphaArray hmm obs (t-1) state)*(transMatrix hmm state state2) | state2 <- states hmm
+    | otherwise     = (outMatrix hmm state $ obs!t)*(sum [(alphaArray hmm obs (t-1) state2)*(transMatrix hmm state2 state) | state2 <- states hmm
                                                          ])
+-- memoized_alphaArray :: (Eq eventType) => HMM stateType eventType -> Array Int eventType -> Int -> stateType -> Prob
+memoized_alphaArray hmm obs t = (map aa (states hmm) !!)
+    where aa state = if t==1
+                        then (outMatrix hmm state $ obs!t)*(initProbs hmm state)
+                        else (outMatrix hmm state $ obs!t)*(sum [(memoized_alphaArray hmm obs (t-1) state)*(transMatrix hmm state state2) | state2 <- states hmm])
 
+memo_alphaArray :: (Eq eventType) => HMM Integer eventType -> Array Int eventType -> Int -> Integer -> Prob
+memo_alphaArray hmm obs = Memo.memo2 Memo.integral Memo.integral aa
+    where aa t state 
+            | t == 1        = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
+            | otherwise     = (outMatrix hmm state $ obs!t)*(sum [(memo_alphaArray hmm obs (t-1) state)*(transMatrix hmm state state2) | state2 <- states hmm
+                                                         ])
+memoized_fib :: Int -> Integer
+memoized_fib = (map fib [0 .. 10] !!)
+   where fib 0 = 0
+         fib 1 = 1
+         fib n = memoized_fib (n-2) + memoized_fib (n-1)
+   
    -- | backwards algorithm
    
 backward :: (Eq eventType, Show eventType) => HMM stateType eventType -> [eventType] -> Prob
@@ -165,9 +184,12 @@ backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
 fftest hmm events = "fwdLst: " ++ show (forwardList hmm events) ++ " fwdArr:" ++ show (forwardArray hmm events)
 bbtest hmm events = "bckLst: " ++ show (backwardList hmm events) ++ " bckArr:" ++ show (backwardArray hmm $ listArray (1,length events) events)
 
-fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backwardList hmm events)
+fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
 
    -- | sample HMM used for testing
+   
+arr :: Array Int Char
+arr = listArray (1,5) "AGTCA"
    
 simpleHMM = HMM { states=[1,2]
                 , events=['A','G','C','T']
