@@ -2,7 +2,7 @@ module HMM
     ( HMM(..), rnf
     , forward
     , backward
-    , baumWelch
+    , baumWelch, baumWelchItr, baumWelchIO
     , alpha, beta
     )
     where
@@ -14,6 +14,7 @@ import Data.Number.LogFloat
 import qualified Data.MemoCombinators as Memo
 import Control.DeepSeq
 import Control.Parallel
+import System.IO
 
 type Prob = LogFloat
 
@@ -22,9 +23,9 @@ type Prob = LogFloat
 data -- (Eq eventType, Eq stateType, Show eventType, Show stateType) =>
      HMM stateType eventType = HMM { states :: [stateType]
                                    , events :: [eventType]
-                                   , initProbs :: (stateType -> Prob)
-                                   , transMatrix :: (stateType -> stateType -> Prob)
-                                   , outMatrix :: (stateType -> eventType -> Prob)
+                                   , initProbs :: !(stateType -> Prob)
+                                   , transMatrix :: !(stateType -> stateType -> Prob)
+                                   , outMatrix :: !(stateType -> eventType -> Prob)
                                    }
 
 instance NFData (HMM stateType eventType) where
@@ -129,38 +130,62 @@ beta hmm obs = memo_beta
 baumWelch :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Int -> HMM stateType eventType
 baumWelch hmm obs count
     | count == 0    = hmm
-    | otherwise     = itr `seq` baumWelch itr obs (count-1)
+    | otherwise     = baumWelch itr obs (count-1)
         where itr = baumWelchItr hmm obs
 
+-- baumWelchIO hmm obs count = do
+-- --     | count == 0    = putStrLn "done"
+-- --     | otherwise     = do
+--         putStrLn ("Iterations left: "++(show count))
+--         let newHMM = baumWelchItr hmm obs
+-- --         seq newHMM $ putStrLn "test"
+--         putStrLn $ show newHMM
+--         if count==1
+--            then return newHMM
+--            else baumWelchIO newHMM obs (count-1)
+    
 baumWelchItr :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
 baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatrix 
+                       --trace "baumWelchItr " $
                        HMM { states = states hmm
                            , events = events hmm
-                           , initProbs = newInitProbs
-                           , transMatrix = {-transMatrix hmm-} newTransMatrix
-                           , outMatrix = {-outMatrix hmm-} newOutMatrix
+                           , initProbs = memo_newInitProbs
+                           , transMatrix = {-transMatrix hmm-} memo_newTransMatrix
+                           , outMatrix = {-outMatrix hmm-} memo_newOutMatrix
                            }
     where bT = snd $ bounds obs
+          memo_newInitProbs state = memo_newInitProbs2 (stateIndex hmm state)
+          memo_newInitProbs2 = Memo.integral memo_newInitProbs3
+          memo_newInitProbs3 state = newInitProbs (states hmm !! state)
           newInitProbs state = gamma 1 state
-          newTransMatrix state1 state2 = sum [xi t state1 state2 | t <- [2..(snd $ bounds obs)]]
-                                        /sum [gamma t state1 | t <- [2..(snd $ bounds obs)]]
+          
+          memo_newTransMatrix state1 state2 = memo_newTransMatrix2 (stateIndex hmm state1) (stateIndex hmm state2)
+          memo_newTransMatrix2 = (Memo.memo2 Memo.integral Memo.integral memo_newTransMatrix3)
+          memo_newTransMatrix3 state1 state2 = newTransMatrix (states hmm !! state1) (states hmm !! state2)
+          newTransMatrix state1 state2 = --trace ("newTransMatrix"++(hmmid hmm)) $
+                                         sum [xi t state1 state2 | t <- [2..bT]]
+                                        /sum [gamma t state1 | t <- [2..bT]]
+          
+          memo_newOutMatrix state event = memo_newOutMatrix2 (stateIndex hmm state) (eventIndex hmm event)
+          memo_newOutMatrix2 = (Memo.memo2 Memo.integral Memo.integral memo_newOutMatrix3)
+          memo_newOutMatrix3 state event = newOutMatrix (states hmm !! state) (events hmm !! event)
           newOutMatrix state event = sum [if (obs!t == event) 
                                              then gamma t state 
                                              else 0
-                                         | t <- [2..(snd $ bounds obs)]
+                                         | t <- [2..bT]
                                          ]
-                                    /sum [gamma t state | t <- [2..(snd $ bounds obs)]]
+                                    /sum [gamma t state | t <- [2..bT]]
                                     
           -- Greek functions, included here for memoization
           xi t state1 state2 = (memo_alpha (t-1) state1)
-                             *(transMatrix hmm state1 state2)
-                             *(outMatrix hmm state2 $ obs!t)
-                             *(memo_beta t state2)
-                             /backwardArrayVar -- (backwardArray hmm obs)
+                              *(transMatrix hmm state1 state2)
+                              *(outMatrix hmm state2 $ obs!t)
+                              *(memo_beta t state2)
+                              /backwardArrayVar -- (backwardArray hmm obs)
           
           gamma t state = (memo_alpha t state)
-                        *(memo_beta t state)
-                        /backwardArrayVar
+                         *(memo_beta t state)
+                         /backwardArrayVar
 
           backwardArrayVar = (backwardArray hmm obs)
 
@@ -180,3 +205,6 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
             | t' == 1       = (outMatrix hmm (states hmm !! state') $ obs!t')*(initProbs hmm $ states hmm !! state')
             | otherwise     = (outMatrix hmm (states hmm !! state') $ obs!t')*(sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
           
+
+-- debug utils
+hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
