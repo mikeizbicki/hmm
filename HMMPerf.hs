@@ -22,15 +22,47 @@ forceEval x = putStrLn $ (show $ length str) ++ " -> " ++ (take 30 str)
     where str = show x
 
 main = defaultMainWith myConfig (return ())
-        [ bench "newHMM - baumWelch 20" $ forceEval $ baumWelch newHMM (genArray 20) 1
-        , bench "newHMM - baumWelch 40" $ forceEval $ baumWelch newHMM (genArray 40) 1
-        , bench "newHMM - baumWelch 60" $ forceEval $ baumWelch newHMM (genArray 60) 1
-        , bench "newHMM - baumWelch 80" $ forceEval $ baumWelch newHMM (genArray 80) 1
-        , bench "newHMM - baumWelch 100" $ forceEval $ baumWelch newHMM (genArray 100) 1
+        [ bench "newHMM - baumWelch 10"     $ forceEval $ baumWelch newHMM (genArray 10) 1
+        , bench "newHMM - baumWelch 100"    $ forceEval $ baumWelch newHMM (genArray 100) 1
+        , bench "newHMM - baumWelch 1000"   $ forceEval $ baumWelch newHMM (genArray 1000) 1
+        , bench "newHMM - baumWelch 10000"  $ forceEval $ baumWelch newHMM (genArray 10000) 1
+        , bench "newHMM - baumWelch 100000" $ forceEval $ baumWelch newHMM (genArray 100000) 1
 {-        , bench "newHMM - forward" $ forceEval $ forward newHMM $ genString 100
         , bench "newHMM - backward" $ forceEval $ backward newHMM $ genString 100
         , bench "oldHMM" $ forceEval $ OldHMM.sequenceProb oldHMM $ genString 100-}
         ]
+
+   -- | tests
+                                              
+listCPExp :: [a] -> Int -> [[a]]
+listCPExp language order = listCPExp' order [[]]
+    where
+        listCPExp' order list
+            | order == 0    = list
+            | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
+
+   -- these should equal ~1 if our recurrence if alpha and beta are correct
+
+forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
+backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
+
+fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
+    
+verifyhmm hmm = do
+        check "initProbs" ip
+        check "transMatrix" tm
+        check "outMatrix" om
+           
+   where check str var = do
+                putStrLn $ str++" tollerance check: "++show var
+{-                if abs(var-1)<0.0001
+                    then putStrLn "True"
+                    else putStrLn "False"-}
+                    
+         ip = sum $ [initProbs hmm s | s <- states hmm]
+         tm = (sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
+         om = sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
+
 
    -- | OldHMM definition
 

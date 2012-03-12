@@ -3,6 +3,7 @@ module HMM
     , forward
     , backward
     , baumWelch
+    , alpha, beta
     )
     where
 
@@ -12,6 +13,7 @@ import Data.List
 import Data.Number.LogFloat
 import qualified Data.MemoCombinators as Memo
 import Control.DeepSeq
+import Control.Parallel
 
 type Prob = LogFloat
 
@@ -108,68 +110,73 @@ beta hmm obs = memo_beta
 
    -- | Baum-Welch
    
-gammaArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType
+{-gammaArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType
                                                                            -> Array Int eventType
                                                                            -> Int
                                                                            -> stateType
-                                                                           -> Prob
-gammaArray hmm obs t state = (alpha hmm obs t state)
-                            *(beta hmm obs t state)
-                            /(backwardArray hmm obs)
+                                                                           -> Prob-}
    
    -- xi i j = P(state (t-1) == i && state (t) == j | obs, lambda)
    
-xiArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType 
-                                                                        -> Array Int eventType 
-                                                                        -> Int 
-                                                                        -> stateType 
-                                                                        -> stateType 
-                                                                        -> Prob
-xiArray hmm obs t state1 state2 = (alpha hmm obs (t-1) state1)
-                                 *(transMatrix hmm state1 state2)
-                                 *(outMatrix hmm state2 $ obs!t)
-                                 *(beta hmm obs t state2)
-                                 /(backwardArray hmm obs)
+-- xiArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType 
+--                                                                         -> Array Int eventType 
+--                                                                         -> Int 
+--                                                                         -> stateType 
+--                                                                         -> stateType 
+--                                                                         -> Prob
+
 
 baumWelch :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Int -> HMM stateType eventType
 baumWelch hmm obs count
     | count == 0    = hmm
-    | otherwise     = baumWelch (baumWelchItr hmm obs) obs (count-1)
+    | otherwise     = itr `seq` baumWelch itr obs (count-1)
+        where itr = baumWelchItr hmm obs
 
 baumWelchItr :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
-baumWelchItr hmm obs = HMM { states = states hmm
+baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatrix 
+                       HMM { states = states hmm
                            , events = events hmm
                            , initProbs = newInitProbs
-                           , transMatrix = newTransMatrix
-                           , outMatrix = newOutMatrix
+                           , transMatrix = {-transMatrix hmm-} newTransMatrix
+                           , outMatrix = {-outMatrix hmm-} newOutMatrix
                            }
-                               where newInitProbs state = gammaArray hmm obs 1 state
-                                     newTransMatrix state1 state2 = sum [xiArray hmm obs t state1 state2 | t <- [2..(snd $ bounds obs)]]
-                                                                   /sum [gammaArray hmm obs t state1 | t <- [2..(snd $ bounds obs)]]
-                                     newOutMatrix state event = sum [if (obs!t == event) 
-                                                                        then gammaArray hmm obs t state 
-                                                                        else 0
-                                                                    | t <- [2..(snd $ bounds obs)]
-                                                                    ]
-                                                               /sum [gammaArray hmm obs t state | t <- [2..(snd $ bounds obs)]]
-                              
-   -- | utility functions
-   --
-   -- | takes the cross product of a list multiple times
-   
-listCPExp :: [a] -> Int -> [[a]]
-listCPExp language order = listCPExp' order [[]]
-    where
-        listCPExp' order list
-            | order == 0    = list
-            | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
+    where bT = snd $ bounds obs
+          newInitProbs state = gamma 1 state
+          newTransMatrix state1 state2 = sum [xi t state1 state2 | t <- [2..(snd $ bounds obs)]]
+                                        /sum [gamma t state1 | t <- [2..(snd $ bounds obs)]]
+          newOutMatrix state event = sum [if (obs!t == event) 
+                                             then gamma t state 
+                                             else 0
+                                         | t <- [2..(snd $ bounds obs)]
+                                         ]
+                                    /sum [gamma t state | t <- [2..(snd $ bounds obs)]]
+                                    
+          -- Greek functions, included here for memoization
+          xi t state1 state2 = (memo_alpha (t-1) state1)
+                             *(transMatrix hmm state1 state2)
+                             *(outMatrix hmm state2 $ obs!t)
+                             *(memo_beta t state2)
+                             /backwardArrayVar -- (backwardArray hmm obs)
+          
+          gamma t state = (memo_alpha t state)
+                        *(memo_beta t state)
+                        /backwardArrayVar
 
-   -- | tests
-                                              
--- these should equal ~1 if our recurrence in alpha is correct
+          backwardArrayVar = (backwardArray hmm obs)
 
-forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
-backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
-
-fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
-    
+          memo_beta t state = memo_beta2 t (stateIndex hmm state)
+          memo_beta2 = (Memo.memo2 Memo.integral Memo.integral memo_beta3)
+          memo_beta3 t' state'
+            | t' == bT      = 1
+            | otherwise     = sum [(transMatrix hmm (states hmm !! state') state2)
+                                  *(outMatrix hmm state2 $ obs!(t'+1))
+                                  *(memo_beta (t'+1) state2) 
+                                  | state2 <- states hmm
+                                  ]
+                                  
+          memo_alpha t state = memo_alpha2 t (stateIndex hmm state)
+          memo_alpha2 = (Memo.memo2 Memo.integral Memo.integral memo_alpha3)
+          memo_alpha3 t' state'
+            | t' == 1       = (outMatrix hmm (states hmm !! state') $ obs!t')*(initProbs hmm $ states hmm !! state')
+            | otherwise     = (outMatrix hmm (states hmm !! state') $ obs!t')*(sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
+          
