@@ -33,6 +33,13 @@ import System.IO
 --                     putStrLn $ show hmm'
 --                     applyLoop nexthmm $ tail tfL
 
+findGenes = do
+    hmmTF <- loadHMM "hmm/TF-3.hmm"
+    hmmDNA <- loadHMM "hmm/autowinegrape-1000-2.hmm"
+    let hmm' = hmmJoin hmmDNA hmmTF 0.999
+    dna <- loadDNAArray 1000
+    return $ viterbi hmm' dna
+
 createTFhmm file hmm = do
     x <- strTF
     let hmm' = baumWelch hmm (listArray (1,length x) x) 10
@@ -61,7 +68,12 @@ createDNAhmm file len hmm = do
     putStrLn $ show hmm'
     saveHMM file hmm'
     return hmm'
-              
+
+verifyHMMFile file = do
+    hmm <- ((loadHMM file) :: IO (HMM String Char))
+    verifyhmm hmm
+
+
 loadDNAArray len = do
     dna <- readFile "dna/winegrape-chromosone2"
     let dnaArray = listArray (1,len) $ filter isBP dna
@@ -110,7 +122,6 @@ omTest s e
     | s==2 && e=='G'    = 0.4
     | s==2 && e=='C'    = 0.4
     | s==2 && e=='T'    = 0.1
-
 
 bwTest = do
     hmm <- loadHMM "hmm/test" ::IO (HMM String Char)

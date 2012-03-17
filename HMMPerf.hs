@@ -30,48 +30,23 @@ forceEval x = putStrLn $ (show $ length str) ++ " -> " ++ (take 30 str)
     where str = show x
 
 main = defaultMainWith myConfig (return ())
-        [ bench ("baumWelch (itr="++show itr++",ord="++show order++",len="++(show arraylen)++")") $ 
-            whnf (baumWelch (simpleMM "AGCT" order) (genArray arraylen)) itr
-            
-            | arraylen <- [1000]
-            , order <- [1..6]
-            , itr <- [1]
-            ]
+--         [ bench ("baumWelch (itr="++show itr++",ord="++show order++",len="++(show arraylen)++")") $ 
+--             whnf (baumWelch (simpleMM "AGCT" order) (genArray arraylen)) itr
+--             
+--             | arraylen <- [1000]
+--             , order <- [1..6]
+--             , itr <- [1]
+--             ]
 
-{-        , bench "newHMM - forward" $ forceEval $ forward newHMM $ genString 100
-        , bench "newHMM - backward" $ forceEval $ backward newHMM $ genString 100
-        , bench "oldHMM" $ forceEval $ OldHMM.sequenceProb oldHMM $ genString 100-}
-
-   -- | tests
-                                              
-listCPExp :: [a] -> Int -> [[a]]
-listCPExp language order = listCPExp' order [[]]
-    where
-        listCPExp' order list
-            | order == 0    = list
-            | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
-
-   -- these should equal ~1 if our recurrence if alpha and beta are correct
-
-forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
-backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
-
-fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
-    
-verifyhmm hmm = do
-        check "initProbs" ip
-        check "transMatrix" tm
-        check "outMatrix" om
-           
-   where check str var = do
-                putStrLn $ str++" tollerance check: "++show var
-{-                if abs(var-1)<0.0001
-                    then putStrLn "True"
-                    else putStrLn "False"-}
-                    
-         ip = sum $ [initProbs hmm s | s <- states hmm]
-         tm = (sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
-         om = sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
+        [ bench ("newHMM - viterbi (states="++show states++",len="++show len++")") $ putStrLn $ show $ viterbi (simpleHMM [1..states] "AGCT") $ genArray len
+        | len <- [1000] -- [10,100,1000,10000,20000,30000,40000,50000,60000,70000,80000,90000,100000,200000,300000,400000,500000,1000000]
+        , states <- [1..100]
+        ]
+--         [ bench "newHMM - forward" $ forceEval $ forward newHMM $ genString len
+--         , bench "newHMM - backward" $ forceEval $ backward newHMM $ genString len
+--         , bench "oldHMM" $ forceEval $ OldHMM.sequenceProb oldHMM $ genString len
+--         | len <- [100,1000,10000]
+--         ]
 
 
    -- | OldHMM definition
