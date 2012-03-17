@@ -1,9 +1,10 @@
 module HMM 
-    ( HMM(..), rnf
+    ( HMM(..), Prob, rnf
     , forward
     , backward
-    , baumWelch, baumWelchItr, baumWelchIO
+    , baumWelch, baumWelchItr --, baumWelchIO
     , alpha, beta
+    , simpleMM, simpleMM2
     )
     where
 
@@ -23,20 +24,29 @@ type Prob = LogFloat
 data -- (Eq eventType, Eq stateType, Show eventType, Show stateType) =>
      HMM stateType eventType = HMM { states :: [stateType]
                                    , events :: [eventType]
-                                   , initProbs :: !(stateType -> Prob)
-                                   , transMatrix :: !(stateType -> stateType -> Prob)
-                                   , outMatrix :: !(stateType -> eventType -> Prob)
+                                   , initProbs :: (stateType -> Prob)
+                                   , transMatrix :: (stateType -> stateType -> Prob)
+                                   , outMatrix :: (stateType -> eventType -> Prob)
                                    }
+--     deriving (Show, Read)
 
-instance NFData (HMM stateType eventType) where
-     rnf a = a `seq` ()
+instance (Show stateType, Show eventType) => Show (HMM stateType eventType) where
+    show hmm = hmm2str hmm 
 
-instance (Show state, Show observation) => Show (HMM state observation) where
-    show hmm = "HMM" ++ " states=" ++ (show $ states hmm) 
-                     ++ " events=" ++ (show $ events hmm) 
-                     ++ " initProbs=" ++ (show [(s,initProbs hmm s) | s <- states hmm])
-                     ++ " transMatrix=" ++ (show [(s1,s2,transMatrix hmm s1 s2) | s1 <- states hmm, s2 <- states hmm])
-                     ++ " outMatrix=" ++ (show [(s,e,outMatrix hmm s e) | s <- states hmm, e <- events hmm])
+-- instance (Eq stateType, Eq eventType, Show stateType, Show eventType, Read stateType, Read eventType) => Read (HMM stateType eventType) where
+--     readsPrec _ str = [(array2hmm ((read str) :: HMMArray stateType eventType),"")]
+
+    
+hmm2str hmm = "HMM" ++ "{ states=" ++ (show $ states hmm) 
+                     ++ ", events=" ++ (show $ events hmm) 
+                     ++ ", initProbs=" ++ (show [(s,initProbs hmm s) | s <- states hmm])
+                     ++ ", transMatrix=" ++ (show [(s1,s2,transMatrix hmm s1 s2) | s1 <- states hmm, s2 <- states hmm])
+                     ++ ", outMatrix=" ++ (show [(s,e,outMatrix hmm s e) | s <- states hmm, e <- events hmm])
+                     ++ "}"
+
+elemIndex2 e list = case elemIndex e list of 
+                            Nothing -> seq (error "stateIndex: Index "++show e++" not in HMM "++show list) 0
+                            Just x -> x
 
 stateIndex :: (Show stateType, Show eventType, Eq stateType) => HMM stateType eventType -> stateType -> Int
 stateIndex hmm state = case elemIndex state $ states hmm of 
@@ -45,8 +55,54 @@ stateIndex hmm state = case elemIndex state $ states hmm of
 
 eventIndex :: (Show stateType, Show eventType, Eq eventType) => HMM stateType eventType -> eventType -> Int
 eventIndex hmm event = case elemIndex event $ events hmm of 
-                            Nothing -> seq (error "stateIndex: Index "++show event++" not in HMM "++show hmm) 0
+                            Nothing -> seq (error ("eventIndex: Index "++show event++" not in HMM "++show hmm)) 0
                             Just x -> x
+
+
+-- standardHMM :: [stateType] -> [eventType] -> HMM stateType eventType
+-- standardHMM sL eL = HMM { states=sL
+--                         , events=eL
+--                         , initProbs = ip
+--                         , transMatrix = tm
+--                         , outMatrix = om
+--                         }
+--     where
+--           ip s = 1.0 / (logFloat $ length sL)
+--           tm s1 s2 = 1.0 / (logFloat $ length sL)
+--           om s e = 1.0 / (logFloat $ length eL)
+
+simpleMM2 eL order = HMM { states = sL
+                        , events = eL
+                        , initProbs = \s -> 1.0 / (logFloat $ length sL)
+                        , transMatrix = \s1 -> \s2 -> if isPrefixOf (tail s1) s2
+                                                          then 1.0 / (logFloat $ length eL)
+                                                          else 0.0
+                        , outMatrix = \s -> \e -> if (last s) == e
+                                                     then 1.0
+                                                     else 0.0
+                        }
+                            where sL = enumerateStates order [[]]
+                                  enumerateStates order' list
+                                      | order' == 0    = list
+                                      | otherwise     = enumerateStates (order'-1) [symbol:l | l <- list, symbol <- eL]
+
+
+simpleMM eL order = HMM { states = sL
+                        , events = eL
+                        , initProbs = \s -> skewedDist s
+                        , transMatrix = \s1 -> \s2 -> if (length s1==0) || (isPrefixOf (tail s1) s2)
+                                                          then skewedDist s2 -- 1.0 / (logFloat $ length sL)
+                                                          else 0.0
+                        , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                        }
+                            where evenDist = 1.0 / sLlen
+                                  skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
+                                  sLlen = logFloat $ length sL
+                                  sL = enumerateStates (order-1) [[]]
+                                  enumerateStates order' list
+                                      | order' == 0    = list
+                                      | otherwise     = enumerateStates (order'-1) [symbol:l | l <- list, symbol <- eL]
+
 
    -- | forward algorithm
       
@@ -130,19 +186,10 @@ beta hmm obs = memo_beta
 baumWelch :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Int -> HMM stateType eventType
 baumWelch hmm obs count
     | count == 0    = hmm
-    | otherwise     = baumWelch itr obs (count-1)
+    | otherwise     = -- trace ("baumWelch iterations left: "++(show count)) $ 
+                      trace (show itr) $
+                      baumWelch itr obs (count-1)
         where itr = baumWelchItr hmm obs
-
--- baumWelchIO hmm obs count = do
--- --     | count == 0    = putStrLn "done"
--- --     | otherwise     = do
---         putStrLn ("Iterations left: "++(show count))
---         let newHMM = baumWelchItr hmm obs
--- --         seq newHMM $ putStrLn "test"
---         putStrLn $ show newHMM
---         if count==1
---            then return newHMM
---            else baumWelchIO newHMM obs (count-1)
     
 baumWelchItr :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> HMM stateType eventType
 baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatrix 
@@ -150,7 +197,7 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
                        HMM { states = states hmm
                            , events = events hmm
                            , initProbs = memo_newInitProbs
-                           , transMatrix = {-transMatrix hmm-} memo_newTransMatrix
+                           , transMatrix = {-newTransMatrix-} memo_newTransMatrix
                            , outMatrix = {-outMatrix hmm-} memo_newOutMatrix
                            }
     where bT = snd $ bounds obs
@@ -205,6 +252,7 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
             | t' == 1       = (outMatrix hmm (states hmm !! state') $ obs!t')*(initProbs hmm $ states hmm !! state')
             | otherwise     = (outMatrix hmm (states hmm !! state') $ obs!t')*(sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
           
+
 
 -- debug utils
 hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1

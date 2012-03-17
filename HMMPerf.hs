@@ -1,3 +1,8 @@
+-- module HMMPerf 
+--     ( verifyhmm
+--     )
+--     where  
+
 import HMM
 import qualified OldHMM as OldHMM
 
@@ -5,13 +10,16 @@ import Criterion.Config
 import Criterion.Main
 import Data.Array
 import Debug.Trace
+import System.IO
 
    -- | Define the tests
 
 myConfig = defaultConfig
             { cfgPerformGC = ljust True
-            , cfgSamples = ljust 1
-            , cfgResamples = ljust 0
+            , cfgSamples = ljust 3
+--             , cfgReport = ljust "perf.txt"
+            , cfgSummaryFile = ljust "perf.csv"
+--             , cfgResamples = ljust 0
 --             , cfgVerbosity = ljust Quiet
             }
 
@@ -22,15 +30,17 @@ forceEval x = putStrLn $ (show $ length str) ++ " -> " ++ (take 30 str)
     where str = show x
 
 main = defaultMainWith myConfig (return ())
-        [ bench "newHMM - baumWelch 10"     $ forceEval $ baumWelch newHMM (genArray 10) 1
-        , bench "newHMM - baumWelch 100"    $ forceEval $ baumWelch newHMM (genArray 100) 1
-        , bench "newHMM - baumWelch 1000"   $ forceEval $ baumWelch newHMM (genArray 1000) 1
-        , bench "newHMM - baumWelch 10000"  $ forceEval $ baumWelch newHMM (genArray 10000) 1
-        , bench "newHMM - baumWelch 100000" $ forceEval $ baumWelch newHMM (genArray 100000) 1
+        [ bench ("baumWelch (itr="++show itr++",ord="++show order++",len="++(show arraylen)++")") $ 
+            whnf (baumWelch (simpleMM "AGCT" order) (genArray arraylen)) itr
+            
+            | arraylen <- [1000]
+            , order <- [1..6]
+            , itr <- [1]
+            ]
+
 {-        , bench "newHMM - forward" $ forceEval $ forward newHMM $ genString 100
         , bench "newHMM - backward" $ forceEval $ backward newHMM $ genString 100
         , bench "oldHMM" $ forceEval $ OldHMM.sequenceProb oldHMM $ genString 100-}
-        ]
 
    -- | tests
                                               
