@@ -1,0 +1,15 @@
+Name:hmm
+Version:0.2.1
+Cabal-Version:  >= 1.2
+Build-type: Simple
+License:BSD3
+Author:Mike Izbicki
+Maintainer:mike@izbicki.me
+Homepage:https://github.com/mikeizbicki/hmm
+Category:Algorithms, Data mining, Machine learning
+Synopsis:A hidden markov model library
+
+Library
+  -- Build-Depends:logfloat
+  Exposed-modules:
+    Data.HMM
