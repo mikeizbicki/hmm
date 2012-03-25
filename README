@@ -1,3 +1,5 @@
-My name is Mike Izbicki, and my email is mike@izbicki.me.  My research interests are mostly AI related, but I'm still pretty open to anything interesting.
+This is a Hidden Markov Model (HMM) library for Haskell.  It is in the hackage repository already, and that's probably the version that you want to use.  Try installing it with the command:
 
-This is where I will be placing updates about my CS234 project.  
+> cabal install hmm
+
+The easiest way to learn to use the library is by following the tutorial at: http://izbicki.me/blog/using-hmms-in-haskell-for-bioinformatics
