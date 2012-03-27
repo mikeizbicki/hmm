@@ -1,15 +1,18 @@
 Name:hmm
-Version:0.2.1
+Version:0.2.1.1
 Cabal-Version:  >= 1.2
 Build-type: Simple
 License:BSD3
+License-file:LICENSE
 Author:Mike Izbicki
 Maintainer:mike@izbicki.me
 Homepage:https://github.com/mikeizbicki/hmm
 Category:Algorithms, Data mining, Machine learning
+
 Synopsis:A hidden markov model library
+Description: Data.HMM is a library for using Hidden Markov Models with Haskell.  Commonly used algoriths (i.e. the forward and backwards algorithms, Viterbi, and Baum-Welch) are implemented.  The best way to learn to use it is to visit the tutorial at http:\/\/izbicki.me\/blog\/using-hmms-in-haskell-for-bioinformatics.  The tutorial also includes performance benchmarks that you should be aware of.
 
 Library
-  -- Build-Depends:logfloat
+  Build-Depends:base >=4 && < 5,logfloat,data-memocombinators,list-extras,array
   Exposed-modules:
     Data.HMM
