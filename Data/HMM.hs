@@ -362,10 +362,7 @@ instance Binary LogFloat where
   get =liftM logToLogFloat (get::Get Double)
 
 hmm2Array :: (HMM stateType eventType) -> (HMMArray stateType eventType)
-hmm2Array hmm = let
-  --tm=[((s1,s2),transMatrix hmm s1 s2) | s1 <- states hmm,s2 <- states hmm]
-  --om=[((s1,e),outMatrix hmm s e) | s <- states hmm,e <- events hmm]
-  in HMMArray { statesA = states hmm
+hmm2Array hmm = HMMArray { statesA = states hmm
                          , eventsA = events hmm
                          , initProbsA = listArray (1,length $ states hmm) [initProbs hmm state | state <- states hmm]
                          , transMatrixA = listArray (1,length $ states hmm) [
