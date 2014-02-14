@@ -11,6 +11,8 @@ module Data.HMM
 --     , verifyhmm
     , loadHMM
     , saveHMM
+    , loadHMM'
+    , saveHMM'
     )
     where
 
@@ -23,6 +25,12 @@ import qualified Data.MemoCombinators as Memo
 -- import Control.Parallel
 import System.IO
 -- import Text.ParserCombinators.Parsec
+import Data.Binary
+import Control.Monad (liftM)
+import Control.Applicative ((<*>), (<$>))
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.Map as M 
+import Data.Maybe (fromJust)
 
 type Prob = LogFloat
 
@@ -333,13 +341,27 @@ data -- (Eq eventType, Eq stateType, Show eventType, Show stateType) =>
                                    }
     deriving (Show,Read)
 
+instance (Binary stateType, Binary eventType) => Binary (HMMArray stateType eventType) where
+  put ha=do
+    put $ statesA ha
+    put $ eventsA ha
+    put $ initProbsA ha
+    put $ transMatrixA ha
+    put $ outMatrixA ha
+  get=HMMArray <$> get <*> get  <*> get  <*> get  <*> get
+
+
 instance Read LogFloat where
     readsPrec a str = do
         dbl <- readsPrec a (drop 8 str) :: [(Double,String)]
 --         trace ("LogFloat -> "++show str) $ [(logFloat ((read (drop 8 str)) :: Double), "")]
         return (logFloat $ fst dbl, snd dbl)
 
-hmm2Array :: (Show stateType, Show eventType) => (HMM stateType eventType) -> (HMMArray stateType eventType)
+instance Binary LogFloat where
+  put =put . (logFromLogFloat:: LogFloat -> Double)
+  get =liftM logToLogFloat (get::Get Double)
+
+hmm2Array :: (HMM stateType eventType) -> (HMMArray stateType eventType)
 hmm2Array hmm = HMMArray { statesA = states hmm
                          , eventsA = events hmm
                          , initProbsA = listArray (1,length $ states hmm) [initProbs hmm state | state <- states hmm]
@@ -358,6 +380,22 @@ array2hmm hmmA = HMM { states = statesA hmmA
                      , transMatrix = \s1 -> \s2 -> transMatrixA hmmA ! (stateAIndex hmmA s1) ! (stateAIndex hmmA s2)
                      , outMatrix = \s -> \e -> outMatrixA hmmA ! (stateAIndex hmmA s) ! (eventAIndex hmmA e)
                      }
+
+array2hmm' :: (Ord stateType, Ord eventType,Show stateType, Show eventType) => (HMMArray stateType eventType) -> (HMM stateType eventType)
+array2hmm' hmmA = let
+  sts=M.fromList $ zip (statesA hmmA) [1..]
+  evts=M.fromList $ zip (eventsA hmmA) [1..]
+  look t m e=case M.lookup e m of
+    Just v->v
+    Nothing->error (t++":"++ (show e)++" not found")
+  stLook = look "State" sts
+  evLook = look "Event" evts
+  in HMM { states = statesA hmmA
+                     , events = eventsA hmmA
+                     , initProbs = \s -> (initProbsA hmmA) ! stLook s
+                     , transMatrix = \s1 -> \s2 -> transMatrixA hmmA ! (stLook s1) ! (stLook s2)
+                     , outMatrix = \s -> \e -> outMatrixA hmmA ! (stLook s) ! (evLook e)
+                     }
                      
 -- | saves the HMM to a file for later retrieval.  HMMs can take a long time to calculate, so this is very useful
 saveHMM :: (Show stateType, Show eventType) => String -> HMM stateType eventType -> IO ()
@@ -365,6 +403,9 @@ saveHMM file hmm = do
     outh <- openFile file WriteMode
     hPutStrLn outh $ show $ hmm2Array hmm
     hClose outh
+
+saveHMM' :: (Binary stateType, Binary eventType) => String -> HMM stateType eventType -> IO ()
+saveHMM' file  =BS.writeFile file . encode . hmm2Array
     
 -- | loads the HMM from a file.  You must specify the type of the resulting HMM when you call it.  For example, (loadHMM "file.hmm" :: HMM String Char)
 
@@ -375,6 +416,8 @@ loadHMM file = do
     let hmm = read hmmstr -- :: HMMArray stateType eventType
     return (array2hmm hmm)
 
+loadHMM' :: (Binary stateType, Binary eventType,Ord stateType, Ord eventType,Show stateType, Show eventType) => String -> IO (HMM stateType eventType )
+loadHMM'=liftM array2hmm' . decodeFile
 
 stateAIndex :: (Show stateType, Show eventType, Eq stateType) => HMMArray stateType eventType -> stateType -> Int
 stateAIndex hmm state = case elemIndex state $ statesA hmm of 
