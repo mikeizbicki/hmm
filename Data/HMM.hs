@@ -11,6 +11,8 @@ module Data.HMM
 --     , verifyhmm
     , loadHMM
     , saveHMM
+    , loadHMM'
+    , saveHMM'
     )
     where
 
@@ -23,6 +25,12 @@ import qualified Data.MemoCombinators as Memo
 -- import Control.Parallel
 import System.IO
 -- import Text.ParserCombinators.Parsec
+import Data.Binary
+import Control.Monad (liftM)
+import Control.Applicative ((<*>), (<$>))
+import qualified Data.ByteString.Lazy as BS
+import qualified Data.Map as M 
+import Data.Maybe (fromJust)
 
 type Prob = LogFloat
 
@@ -152,32 +160,41 @@ beta hmm obs = memo_beta
 
 
 -- | Viterbi's algorithm calculates the most probable path through our states given an event array
-viterbi :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => 
+viterbi :: (Eq eventType, Ord stateType, Show eventType, Show stateType) => 
            HMM stateType eventType -> Array Int eventType -> [stateType]
-viterbi hmm obs = [memo_x' t | t <- [1..bT]]
-    where bT = snd $ bounds obs
-          
+viterbi hmm obs = [memo_x' t | t <- [sT..bT]]
+    where (sT,bT) =bounds obs
+           -- use a map to speed up state->integer and back
+          sts=M.fromList $ zip (states hmm) [1..]
+          stsInv=M.fromList $ zip [1..] (states hmm) 
+          look t m e=case M.lookup e m of
+            Just v->v
+            Nothing->error (t++":"++ (show e)++" not found")
+          stLook = look "State" sts
+          stInv = look "StateIdx" stsInv
           memo_x' = Memo.integral x'
           x' t 
               | t == bT   = argmax (\i -> memo_delta bT i) (states hmm)
               | otherwise = memo_psi (t+1) (memo_x' (t+1))
               
 --           delta :: Int -> stateType -> Prob
-          memo_delta t state = memo_delta2 t (stateIndex hmm state)
+          memo_delta t state = memo_delta2 t (stLook state)
           memo_delta2 = (Memo.memo2 Memo.integral Memo.integral memo_delta3)
-          memo_delta3 t state = delta t (states hmm !! state)
+          memo_delta3 t state = delta t (stInv state)
           delta t state
-              | t == 1    = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
-              | otherwise = maximum [(memo_delta (t-1) i)*(transMatrix hmm i state)*(outMatrix hmm (state) $ obs!t)
+              | t == sT    = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
+              | otherwise = 
+                let om=outMatrix hmm (state) $ obs!t
+                in maximum [(memo_delta (t-1) i)*(transMatrix hmm i state)*om
                                     | i <- states hmm
                                     ]
           
 --           psi :: Int -> stateType -> stateType
-          memo_psi t state = memo_psi2 t (stateIndex hmm state)
+          memo_psi t state = memo_psi2 t (stLook state)
           memo_psi2 = (Memo.memo2 Memo.integral Memo.integral memo_psi3)
-          memo_psi3 t state = psi t (states hmm !! state)
+          memo_psi3 t state = psi t (stInv state)
           psi t state 
-              | t == 1    = (states hmm) !! 0
+              | t == 1    = head $ states hmm
               | otherwise = argmax (\i -> (memo_delta (t-1) i) * (transMatrix hmm i state)) (states hmm) 
 
 -- | Baum-Welch is used to train an HMM
@@ -333,20 +350,36 @@ data -- (Eq eventType, Eq stateType, Show eventType, Show stateType) =>
                                    }
     deriving (Show,Read)
 
+instance (Binary stateType, Binary eventType) => Binary (HMMArray stateType eventType) where
+  put ha=do
+    put $ statesA ha
+    put $ eventsA ha
+    put $ initProbsA ha
+    put $ transMatrixA ha
+    put $ outMatrixA ha
+  get=HMMArray <$> get <*> get  <*> get  <*> get  <*> get
+
+
 instance Read LogFloat where
     readsPrec a str = do
         dbl <- readsPrec a (drop 8 str) :: [(Double,String)]
 --         trace ("LogFloat -> "++show str) $ [(logFloat ((read (drop 8 str)) :: Double), "")]
         return (logFloat $ fst dbl, snd dbl)
 
-hmm2Array :: (Show stateType, Show eventType) => (HMM stateType eventType) -> (HMMArray stateType eventType)
-hmm2Array hmm = HMMArray { statesA = states hmm
+instance Binary LogFloat where
+  put =put . (logFromLogFloat:: LogFloat -> Double)
+  get =liftM logToLogFloat (get::Get Double)
+
+hmm2Array :: (HMM stateType eventType) -> (HMMArray stateType eventType)
+hmm2Array hmm = let
+  stL=length $ states hmm
+  in HMMArray { statesA = states hmm
                          , eventsA = events hmm
-                         , initProbsA = listArray (1,length $ states hmm) [initProbs hmm state | state <- states hmm]
-                         , transMatrixA = listArray (1,length $ states hmm) [
-                                            listArray (1,length $ states hmm) [transMatrix hmm s1 s2 | s1 <- states hmm]
-                                                                                                      | s2 <- states hmm]
-                         , outMatrixA = listArray (1,length $ states hmm) [
+                         , initProbsA = listArray (1,stL) [initProbs hmm state | state <- states hmm]
+                         , transMatrixA = listArray (1,stL) [
+                                            listArray (1,stL) [transMatrix hmm s1 s2 | s2 <- states hmm]
+                                                                                                      | s1 <- states hmm]
+                         , outMatrixA = listArray (1,stL) [
                                             listArray (1,length $ events hmm) [outMatrix hmm s e | e <- events hmm]
                                                                                                       | s <- states hmm]
                          }
@@ -358,6 +391,22 @@ array2hmm hmmA = HMM { states = statesA hmmA
                      , transMatrix = \s1 -> \s2 -> transMatrixA hmmA ! (stateAIndex hmmA s1) ! (stateAIndex hmmA s2)
                      , outMatrix = \s -> \e -> outMatrixA hmmA ! (stateAIndex hmmA s) ! (eventAIndex hmmA e)
                      }
+
+array2hmm' :: (Ord stateType, Ord eventType,Show stateType, Show eventType) => (HMMArray stateType eventType) -> (HMM stateType eventType)
+array2hmm' hmmA = let
+  sts=M.fromList $ zip (statesA hmmA) [1..]
+  evts=M.fromList $ zip (eventsA hmmA) [1..]
+  look t m e=case M.lookup e m of
+    Just v->v
+    Nothing->error (t++":"++ (show e)++" not found")
+  stLook = look "State" sts
+  evLook = look "Event" evts
+  in HMM { states = statesA hmmA
+                     , events = eventsA hmmA
+                     , initProbs = \s -> (initProbsA hmmA) ! stLook s
+                     , transMatrix = \s1 -> \s2 -> transMatrixA hmmA ! (stLook s1) ! (stLook s2)
+                     , outMatrix = \s -> \e -> outMatrixA hmmA ! (stLook s) ! (evLook e)
+                     }
                      
 -- | saves the HMM to a file for later retrieval.  HMMs can take a long time to calculate, so this is very useful
 saveHMM :: (Show stateType, Show eventType) => String -> HMM stateType eventType -> IO ()
@@ -365,6 +414,9 @@ saveHMM file hmm = do
     outh <- openFile file WriteMode
     hPutStrLn outh $ show $ hmm2Array hmm
     hClose outh
+
+saveHMM' :: (Binary stateType, Binary eventType) => String -> HMM stateType eventType -> IO ()
+saveHMM' file  =BS.writeFile file . encode . hmm2Array
     
 -- | loads the HMM from a file.  You must specify the type of the resulting HMM when you call it.  For example, (loadHMM "file.hmm" :: HMM String Char)
 
@@ -375,6 +427,8 @@ loadHMM file = do
     let hmm = read hmmstr -- :: HMMArray stateType eventType
     return (array2hmm hmm)
 
+loadHMM' :: (Binary stateType, Binary eventType,Ord stateType, Ord eventType,Show stateType, Show eventType) => String -> IO (HMM stateType eventType )
+loadHMM'=liftM array2hmm' . decodeFile
 
 stateAIndex :: (Show stateType, Show eventType, Eq stateType) => HMMArray stateType eventType -> stateType -> Int
 stateAIndex hmm state = case elemIndex state $ statesA hmm of 
