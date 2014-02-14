@@ -160,32 +160,41 @@ beta hmm obs = memo_beta
 
 
 -- | Viterbi's algorithm calculates the most probable path through our states given an event array
-viterbi :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => 
+viterbi :: (Eq eventType, Ord stateType, Show eventType, Show stateType) => 
            HMM stateType eventType -> Array Int eventType -> [stateType]
-viterbi hmm obs = [memo_x' t | t <- [1..bT]]
-    where bT = snd $ bounds obs
-          
+viterbi hmm obs = [memo_x' t | t <- [sT..bT]]
+    where (sT,bT) =bounds obs
+           -- use a map to speed up state->integer and back
+          sts=M.fromList $ zip (states hmm) [1..]
+          stsInv=M.fromList $ zip [1..] (states hmm) 
+          look t m e=case M.lookup e m of
+            Just v->v
+            Nothing->error (t++":"++ (show e)++" not found")
+          stLook = look "State" sts
+          stInv = look "StateIdx" stsInv
           memo_x' = Memo.integral x'
           x' t 
               | t == bT   = argmax (\i -> memo_delta bT i) (states hmm)
               | otherwise = memo_psi (t+1) (memo_x' (t+1))
               
 --           delta :: Int -> stateType -> Prob
-          memo_delta t state = memo_delta2 t (stateIndex hmm state)
+          memo_delta t state = memo_delta2 t (stLook state)
           memo_delta2 = (Memo.memo2 Memo.integral Memo.integral memo_delta3)
-          memo_delta3 t state = delta t (states hmm !! state)
+          memo_delta3 t state = delta t (stInv state)
           delta t state
-              | t == 1    = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
-              | otherwise = maximum [(memo_delta (t-1) i)*(transMatrix hmm i state)*(outMatrix hmm (state) $ obs!t)
+              | t == sT    = (outMatrix hmm state $ obs!t)*(initProbs hmm state)
+              | otherwise = 
+                let om=outMatrix hmm (state) $ obs!t
+                in maximum [(memo_delta (t-1) i)*(transMatrix hmm i state)*om
                                     | i <- states hmm
                                     ]
           
 --           psi :: Int -> stateType -> stateType
-          memo_psi t state = memo_psi2 t (stateIndex hmm state)
+          memo_psi t state = memo_psi2 t (stLook state)
           memo_psi2 = (Memo.memo2 Memo.integral Memo.integral memo_psi3)
-          memo_psi3 t state = psi t (states hmm !! state)
+          memo_psi3 t state = psi t (stInv state)
           psi t state 
-              | t == 1    = (states hmm) !! 0
+              | t == 1    = head $ states hmm
               | otherwise = argmax (\i -> (memo_delta (t-1) i) * (transMatrix hmm i state)) (states hmm) 
 
 -- | Baum-Welch is used to train an HMM
@@ -362,13 +371,15 @@ instance Binary LogFloat where
   get =liftM logToLogFloat (get::Get Double)
 
 hmm2Array :: (HMM stateType eventType) -> (HMMArray stateType eventType)
-hmm2Array hmm = HMMArray { statesA = states hmm
+hmm2Array hmm = let
+  stL=length $ states hmm
+  in HMMArray { statesA = states hmm
                          , eventsA = events hmm
-                         , initProbsA = listArray (1,length $ states hmm) [initProbs hmm state | state <- states hmm]
-                         , transMatrixA = listArray (1,length $ states hmm) [
-                                            listArray (1,length $ states hmm) [transMatrix hmm s1 s2 | s2 <- states hmm]
+                         , initProbsA = listArray (1,stL) [initProbs hmm state | state <- states hmm]
+                         , transMatrixA = listArray (1,stL) [
+                                            listArray (1,stL) [transMatrix hmm s1 s2 | s2 <- states hmm]
                                                                                                       | s1 <- states hmm]
-                         , outMatrixA = listArray (1,length $ states hmm) [
+                         , outMatrixA = listArray (1,stL) [
                                             listArray (1,length $ events hmm) [outMatrix hmm s e | e <- events hmm]
                                                                                                       | s <- states hmm]
                          }
