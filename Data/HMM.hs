@@ -302,6 +302,7 @@ hmmJoin hmm1 hmm2 ratio = HMM { states = states1 ++ states2
 --                                         lift x =read $ (snd x )
 
 -- debug utils
+hmmid :: HMM stateType eventType -> String
 hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
 
 -- | tests
@@ -314,15 +315,25 @@ listCPExp language order = listCPExp' order [[]]
             | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
 
 -- | should always equal 1
+forwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal 1
+backwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal each other
+fbtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> [eventType] -> String
 fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
     
 -- | initProbs should always equal 1; the others should equal the number of states
+verifyhmm :: HMM stateType eventType -> IO ()
 verifyhmm hmm = do
         seq ip $ check "initProbs" ip
         check "transMatrix" tm
