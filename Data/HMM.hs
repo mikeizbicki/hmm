@@ -26,7 +26,7 @@ import qualified Data.MemoCombinators as Memo
 import System.IO
 -- import Text.ParserCombinators.Parsec
 import Data.Binary
-import Control.Monad (liftM)
+import Control.Monad (liftM, replicateM)
 import Control.Applicative ((<*>), (<$>))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M 
@@ -82,10 +82,7 @@ simpleMM eL order = HMM { states = sL
                             where evenDist = 1.0 / sLlen
                                   skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
                                   sLlen = logFloat $ length sL
-                                  sL = enumerateStates (order-1) [[]]
-                                  enumerateStates order' list
-                                      | order' == 0    = list
-                                      | otherwise     = enumerateStates (order'-1) [symbol:l | l <- list, symbol <- eL]
+                                  sL = fmap reverse $ replicateM (order-1) eL
 
 -- | Use simpleHMM to create an untrained hidden Markov model
 simpleHMM :: (Eq stateType, Show eventType, Show stateType) => 
