@@ -12,6 +12,15 @@ Category: Algorithms, Data mining, Machine learning
 Synopsis: A hidden markov model library
 Description: Data.HMM is a library for using Hidden Markov Models with Haskell.  Commonly used algoriths (i.e. the forward and backwards algorithms, Viterbi, and Baum-Welch) are implemented.  The best way to learn to use it is to visit the tutorial at http:\/\/izbicki.me\/blog\/using-hmms-in-haskell-for-bioinformatics.  The tutorial also includes performance benchmarks that you should be aware of.
 
+Source-Repository this
+  Tag: 0.3
+  Type: git
+  Location: https://github.com/mikeizbicki/hmm
+
+Source-Repository head
+  Type: git
+  Location: https://github.com/mikeizbicki/hmm
+
 Library
   Build-Depends: 
                  base,logfloat,data-memocombinators,list-extras,array,
