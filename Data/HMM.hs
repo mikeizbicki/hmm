@@ -30,6 +30,7 @@ import Control.Monad (liftM)
 import Control.Applicative ((<*>), (<$>))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M 
+import Data.Char (isSpace)
 import Data.Maybe (fromJust)
 
 type Prob = LogFloat
@@ -407,27 +408,30 @@ array2hmm' hmmA = let
                      , transMatrix = \s1 -> \s2 -> transMatrixA hmmA ! (stLook s1) ! (stLook s2)
                      , outMatrix = \s -> \e -> outMatrixA hmmA ! (stLook s) ! (evLook e)
                      }
-                     
--- | saves the HMM to a file for later retrieval.  HMMs can take a long time to calculate, so this is very useful
-saveHMM :: (Show stateType, Show eventType) => String -> HMM stateType eventType -> IO ()
-saveHMM file hmm = do
-    outh <- openFile file WriteMode
-    hPutStrLn outh $ show $ hmm2Array hmm
-    hClose outh
 
-saveHMM' :: (Binary stateType, Binary eventType) => String -> HMM stateType eventType -> IO ()
-saveHMM' file  =BS.writeFile file . encode . hmm2Array
-    
+-- | saves the HMM to a file for later retrieval.  HMMs can take a long time to calculate, so this is very useful
+saveHMM :: (Show stateType, Show eventType) => FilePath -> HMM stateType eventType -> IO ()
+saveHMM file = writeFile file . show . hmm2Array
+
+saveHMM' :: (Binary stateType, Binary eventType) => FilePath -> HMM stateType eventType -> IO ()
+saveHMM' file = BS.writeFile file . encode . hmm2Array
+
 -- | loads the HMM from a file.  You must specify the type of the resulting HMM when you call it.  For example, (loadHMM "file.hmm" :: HMM String Char)
 
--- loadHMM :: (Read stateType, Read eventType) => String -> IO (HMM stateType eventType)
+loadHMM ::
+    (Eq eventType, Eq stateType,
+     Show stateType, Show eventType, Read stateType, Read eventType) =>
+    FilePath -> IO (HMM stateType eventType)
 loadHMM file = do
-    inh <- openFile file ReadMode
-    hmmstr <- hGetLine inh
-    let hmm = read hmmstr -- :: HMMArray stateType eventType
-    return (array2hmm hmm)
+    hmmstr <- hGetContents =<< openFile file ReadMode
+    case reads hmmstr of
+        [(hmm, trailer)] ->
+           if all isSpace trailer
+             then return (array2hmm hmm)
+             else ioError $ userError "junk after HMM data"
+        _ -> ioError $ userError "could not parse saved HMM"
 
-loadHMM' :: (Binary stateType, Binary eventType,Ord stateType, Ord eventType,Show stateType, Show eventType) => String -> IO (HMM stateType eventType )
+loadHMM' :: (Binary stateType, Binary eventType, Ord stateType, Ord eventType, Show stateType, Show eventType) => FilePath -> IO (HMM stateType eventType )
 loadHMM'=liftM array2hmm' . decodeFile
 
 stateAIndex :: (Show stateType, Show eventType, Eq stateType) => HMMArray stateType eventType -> stateType -> Int
