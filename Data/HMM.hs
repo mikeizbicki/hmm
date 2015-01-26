@@ -19,19 +19,17 @@ module Data.HMM
 import Debug.Trace
 import Data.Array
 import Data.List
-import Data.List.Extras
+import Data.List.Extras (argmax)
 import Data.Number.LogFloat
 import qualified Data.MemoCombinators as Memo
--- import Control.Parallel
 import System.IO
--- import Text.ParserCombinators.Parsec
 import Data.Binary
 import Control.Monad (liftM, replicateM)
 import Control.Applicative ((<*>), (<$>))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M 
 import Data.Char (isSpace)
-import Data.Maybe (fromJust)
+
 
 type Prob = LogFloat
 
@@ -47,7 +45,10 @@ data HMM stateType eventType = HMM { states :: [stateType]
 
 instance (Show stateType, Show eventType) => Show (HMM stateType eventType) where
     show hmm = hmm2str hmm 
-    
+
+hmm2str ::
+    (Show stateType, Show eventType) =>
+    HMM stateType eventType -> String
 hmm2str hmm = "HMM" ++ "{ states=" ++ (show $ states hmm) 
                      ++ ", events=" ++ (show $ events hmm) 
                      ++ ", initProbs=" ++ (show [(s,initProbs hmm s) | s <- states hmm])
@@ -77,6 +78,9 @@ eventIndex hmm event =
     elemIndexMsg "eventIndex" event events hmm
 
 -- | Use simpleMM to create an untrained standard Markov model
+simpleMM ::
+    (Eq a, Show a, Integral i) =>
+    [a] -> i -> HMM [a] a
 simpleMM eL order = HMM { states = sL
                         , events = eL
                         , initProbs = \s -> evenDist--skewedDist s
@@ -88,7 +92,7 @@ simpleMM eL order = HMM { states = sL
                             where evenDist = 1.0 / sLlen
                                   skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
                                   sLlen = logFloat $ length sL
-                                  sL = fmap reverse $ replicateM (order-1) eL
+                                  sL = fmap reverse $ replicateM (fromIntegral order-1) eL
 
 -- | Use simpleHMM to create an untrained hidden Markov model
 simpleHMM :: (Eq stateType, Show eventType, Show stateType) => 
@@ -303,6 +307,7 @@ hmmJoin hmm1 hmm2 ratio = HMM { states = states1 ++ states2
 --                                         lift x =read $ (snd x )
 
 -- debug utils
+hmmid :: HMM stateType eventType -> String
 hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
 
 -- | tests
@@ -315,15 +320,25 @@ listCPExp language order = listCPExp' order [[]]
             | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
 
 -- | should always equal 1
+forwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal 1
+backwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal each other
+fbtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> [eventType] -> String
 fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
     
 -- | initProbs should always equal 1; the others should equal the number of states
+verifyhmm :: HMM stateType eventType -> IO ()
 verifyhmm hmm = do
         seq ip $ check "initProbs" ip
         check "transMatrix" tm
