@@ -19,18 +19,15 @@ module Data.HMM
 import Debug.Trace
 import Data.Array
 import Data.List
-import Data.List.Extras
+import Data.List.Extras (argmax)
 import Data.Number.LogFloat
 import qualified Data.MemoCombinators as Memo
--- import Control.Parallel
 import System.IO
--- import Text.ParserCombinators.Parsec
 import Data.Binary
 import Control.Monad (liftM)
 import Control.Applicative ((<*>), (<$>))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M 
-import Data.Maybe (fromJust)
 
 type Prob = LogFloat
 
