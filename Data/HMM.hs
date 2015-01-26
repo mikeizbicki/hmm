@@ -54,20 +54,26 @@ hmm2str hmm = "HMM" ++ "{ states=" ++ (show $ states hmm)
                      ++ ", outMatrix=" ++ (show [(s,e,outMatrix hmm s e) | s <- states hmm, e <- events hmm])
                      ++ "}"
 
+elemIndexMsg ::
+    (Eq a, Show a, Show hmm) =>
+    String -> a -> (hmm -> [a]) -> hmm -> Int
+elemIndexMsg name x select hmm =
+    case elemIndex x $ select hmm of
+        Just i -> i
+        Nothing ->
+            error (name ++ ": Index " ++ show x ++ " not in HMM " ++ show hmm)
+
 elemIndex2 :: (Show a, Eq a) => a -> [a] -> Int
-elemIndex2 e list = case elemIndex e list of 
-                            Nothing -> seq (error ("elemIndex2: Index "++show e++" not in HMM "++show list)) 0
-                            Just x -> x
+elemIndex2 x xs =
+    elemIndexMsg "elemIndex2" x id xs
 
 stateIndex :: (Show stateType, Show eventType, Eq stateType) => HMM stateType eventType -> stateType -> Int
-stateIndex hmm state = case elemIndex state $ states hmm of 
-                            Nothing -> seq (error ("stateIndex: Index "++show state++" not in HMM "++show hmm)) 0
-                            Just x -> x
+stateIndex hmm state =
+    elemIndexMsg "stateIndex" state states hmm
 
 eventIndex :: (Show stateType, Show eventType, Eq eventType) => HMM stateType eventType -> eventType -> Int
-eventIndex hmm event = case elemIndex event $ events hmm of 
-                            Nothing -> seq (error ("eventIndex: Index "++show event++" not in HMM "++show hmm)) 0
-                            Just x -> x
+eventIndex hmm event =
+    elemIndexMsg "eventIndex" event events hmm
 
 -- | Use simpleMM to create an untrained standard Markov model
 simpleMM eL order = HMM { states = sL
@@ -431,13 +437,11 @@ loadHMM' :: (Binary stateType, Binary eventType,Ord stateType, Ord eventType,Sho
 loadHMM'=liftM array2hmm' . decodeFile
 
 stateAIndex :: (Show stateType, Show eventType, Eq stateType) => HMMArray stateType eventType -> stateType -> Int
-stateAIndex hmm state = case elemIndex state $ statesA hmm of 
-                            Nothing -> seq (error "stateIndex: Index "++show state++" not in HMM "++show hmm) 0
-                            Just x -> x+1
+stateAIndex hmm state =
+    elemIndexMsg "stateAIndex" state statesA hmm + 1
 
 eventAIndex :: (Show stateType, Show eventType, Eq eventType) => HMMArray stateType eventType -> eventType -> Int
-eventAIndex hmm event = case elemIndex event $ eventsA hmm of 
-                            Nothing -> seq (error ("eventIndex: Index "++show event++" not in HMM "++show hmm)) 0
-                            Just x -> x+1
+eventAIndex hmm event =
+    elemIndexMsg "eventAIndex" event eventsA hmm + 1
 
 ------------
