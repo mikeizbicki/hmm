@@ -46,7 +46,10 @@ data HMM stateType eventType = HMM { states :: [stateType]
 
 instance (Show stateType, Show eventType) => Show (HMM stateType eventType) where
     show hmm = hmm2str hmm 
-    
+
+hmm2str ::
+    (Show stateType, Show eventType) =>
+    HMM stateType eventType -> String
 hmm2str hmm = "HMM" ++ "{ states=" ++ (show $ states hmm) 
                      ++ ", events=" ++ (show $ events hmm) 
                      ++ ", initProbs=" ++ (show [(s,initProbs hmm s) | s <- states hmm])
@@ -70,6 +73,9 @@ eventIndex hmm event = case elemIndex event $ events hmm of
                             Just x -> x
 
 -- | Use simpleMM to create an untrained standard Markov model
+simpleMM ::
+    (Eq a, Show a, Eq i, Num i) =>
+    [a] -> i -> HMM [a] a
 simpleMM eL order = HMM { states = sL
                         , events = eL
                         , initProbs = \s -> evenDist--skewedDist s
