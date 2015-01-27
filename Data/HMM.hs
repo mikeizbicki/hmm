@@ -173,7 +173,7 @@ viterbi hmm obs = [memo_x' t | t <- [sT..bT]]
     where (sT,bT) =bounds obs
            -- use a map to speed up state->integer and back
           sts=M.fromList $ zip (states hmm) [1..]
-          stsInv=M.fromList $ zip [1..] (states hmm) 
+          stsInv=M.fromList $ zip [(1::Int)..] (states hmm)
           look t m e=case M.lookup e m of
             Just v->v
             Nothing->error (t++":"++ (show e)++" not found")
