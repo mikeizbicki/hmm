@@ -83,11 +83,11 @@ simpleMM ::
     [a] -> i -> HMM [a] a
 simpleMM eL order = HMM { states = sL
                         , events = eL
-                        , initProbs = \s -> evenDist--skewedDist s
+                        , initProbs = \ _s -> evenDist--skewedDist s
                         , transMatrix = \s1 -> \s2 -> if (length s1==0) || (isPrefixOf (tail s1) s2)
                                                           then skewedDist s2 --1.0 / (logFloat $ length sL)
                                                           else 0.0
-                        , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                        , outMatrix = \ _s -> \ _e -> 1.0/(logFloat $ length eL)
                         }
                             where evenDist = 1.0 / sLlen
                                   skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
@@ -99,9 +99,9 @@ simpleHMM :: (Eq stateType, Show eventType, Show stateType) =>
              [stateType] -> [eventType] -> HMM stateType eventType
 simpleHMM sL eL = HMM { states = sL
                       , events = eL
-                      , initProbs = \s -> evenDist--skewedDist s
-                      , transMatrix = \s1 -> \s2 -> skewedDist s2
-                      , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                      , initProbs = \ _s -> evenDist--skewedDist s
+                      , transMatrix = \ _s1 -> \s2 -> skewedDist s2
+                      , outMatrix = \ _s -> \ _e -> 1.0/(logFloat $ length eL)
                       }
                           where evenDist = 1.0 / sLlen
                                 skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
@@ -139,14 +139,13 @@ backward :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM 
 backward hmm obs = backwardArray hmm $ listArray (1,length obs) obs
     
 backwardArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Prob
-backwardArray hmm obs = backwardArray' hmm obs
-    where 
-          backwardArray' hmm obs = sum [(initProbs hmm state)
-                                       *(outMatrix hmm state $ obs!1)
-                                       *(beta hmm obs 1 state)
-                                       | state <- states hmm
-                                       ]
-    
+backwardArray hmm obs =
+    sum [ initProbs hmm state
+        * outMatrix hmm state (obs!1)
+        * beta hmm obs 1 state
+        | state <- states hmm
+        ]
+
 beta :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType 
                                                                       -> Array Int eventType 
                                                                       -> Int 
@@ -174,7 +173,7 @@ viterbi hmm obs = [memo_x' t | t <- [sT..bT]]
     where (sT,bT) =bounds obs
            -- use a map to speed up state->integer and back
           sts=M.fromList $ zip (states hmm) [1..]
-          stsInv=M.fromList $ zip [1..] (states hmm) 
+          stsInv=M.fromList $ zip [(1::Int)..] (states hmm)
           look t m e=case M.lookup e m of
             Just v->v
             Nothing->error (t++":"++ (show e)++" not found")
@@ -307,53 +306,8 @@ hmmJoin hmm1 hmm2 ratio = HMM { states = states1 ++ states2
 --                                         lift x =read $ (snd x )
 
 -- debug utils
-hmmid :: HMM stateType eventType -> String
-hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
-
--- | tests
-                                              
-listCPExp :: [a] -> Int -> [[a]]
-listCPExp language order = listCPExp' order [[]]
-    where
-        listCPExp' order list
-            | order == 0    = list
-            | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
-
--- | should always equal 1
-forwardtest ::
-    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
-    HMM stateType eventType -> Int -> Prob
-forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
-
--- | should always equal 1
-backwardtest ::
-    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
-    HMM stateType eventType -> Int -> Prob
-backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
-
--- | should always equal each other
-fbtest ::
-    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
-    HMM stateType eventType -> [eventType] -> String
-fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
-    
--- | initProbs should always equal 1; the others should equal the number of states
-verifyhmm :: HMM stateType eventType -> IO ()
-verifyhmm hmm = do
-        seq ip $ check "initProbs" ip
-        check "transMatrix" tm
-        check "outMatrix" om
-           
-   where check str var = do
-                putStrLn $ str++" tollerance check: "++show var
-{-                if abs(var-1)<0.0001
-                    then putStrLn "True"
-                    else putStrLn "False"-}
-                    
-         ip = sum $ [initProbs hmm s | s <- states hmm]
-         tm = (sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
-         om = sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
-
+_hmmid :: HMM stateType eventType -> String
+_hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
 
 
 -----

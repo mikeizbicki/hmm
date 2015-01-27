@@ -29,3 +29,6 @@ Library
                  containers >=0.4.2 && <0.6
   Exposed-modules:
     Data.HMM
+  Other-modules:
+    Data.HMMTest
+  GHC-Options:   -Wall
