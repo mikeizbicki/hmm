@@ -2,13 +2,12 @@ module Data.HMMTest where
 
 import Data.HMM (HMM(..), Prob, forward, backward)
 
+import Control.Monad (replicateM)
+
 
 listCPExp :: [a] -> Int -> [[a]]
-listCPExp language order = listCPExp' order [[]]
-    where
-        listCPExp' order list
-            | order == 0    = list
-            | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
+listCPExp language order =
+    fmap reverse $ replicateM order language
 
 -- | should always equal 1
 forwardtest ::
