@@ -83,11 +83,11 @@ simpleMM ::
     [a] -> i -> HMM [a] a
 simpleMM eL order = HMM { states = sL
                         , events = eL
-                        , initProbs = \s -> evenDist--skewedDist s
+                        , initProbs = \ _s -> evenDist--skewedDist s
                         , transMatrix = \s1 -> \s2 -> if (length s1==0) || (isPrefixOf (tail s1) s2)
                                                           then skewedDist s2 --1.0 / (logFloat $ length sL)
                                                           else 0.0
-                        , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                        , outMatrix = \ _s -> \ _e -> 1.0/(logFloat $ length eL)
                         }
                             where evenDist = 1.0 / sLlen
                                   skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
@@ -99,9 +99,9 @@ simpleHMM :: (Eq stateType, Show eventType, Show stateType) =>
              [stateType] -> [eventType] -> HMM stateType eventType
 simpleHMM sL eL = HMM { states = sL
                       , events = eL
-                      , initProbs = \s -> evenDist--skewedDist s
-                      , transMatrix = \s1 -> \s2 -> skewedDist s2
-                      , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                      , initProbs = \ _s -> evenDist--skewedDist s
+                      , transMatrix = \ _s1 -> \s2 -> skewedDist s2
+                      , outMatrix = \ _s -> \ _e -> 1.0/(logFloat $ length eL)
                       }
                           where evenDist = 1.0 / sLlen
                                 skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
@@ -139,14 +139,13 @@ backward :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM 
 backward hmm obs = backwardArray hmm $ listArray (1,length obs) obs
     
 backwardArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Prob
-backwardArray hmm obs = backwardArray' hmm obs
-    where 
-          backwardArray' hmm obs = sum [(initProbs hmm state)
-                                       *(outMatrix hmm state $ obs!1)
-                                       *(beta hmm obs 1 state)
-                                       | state <- states hmm
-                                       ]
-    
+backwardArray hmm obs =
+    sum [ initProbs hmm state
+        * outMatrix hmm state (obs!1)
+        * beta hmm obs 1 state
+        | state <- states hmm
+        ]
+
 beta :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType 
                                                                       -> Array Int eventType 
                                                                       -> Int 
@@ -307,8 +306,8 @@ hmmJoin hmm1 hmm2 ratio = HMM { states = states1 ++ states2
 --                                         lift x =read $ (snd x )
 
 -- debug utils
-hmmid :: HMM stateType eventType -> String
-hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
+_hmmid :: HMM stateType eventType -> String
+_hmmid hmm = show $ initProbs hmm $ (states hmm) !! 1
 
 
 -----
