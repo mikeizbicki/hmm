@@ -1,6 +1,6 @@
 module Data.HMMTest where
 
-import Data.HMM
+import Data.HMM (HMM(..), Prob, forward, backward)
 
 
 listCPExp :: [a] -> Int -> [[a]]
