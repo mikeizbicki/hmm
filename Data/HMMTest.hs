@@ -48,6 +48,7 @@ verifyhmm hmm = do
 
 -- Test HMMs
 
+newHMM :: HMM Int Char
 newHMM = HMM { states=[1,2]
              , events=['A','G','C','T']
              , initProbs = ipTest
@@ -55,16 +56,19 @@ newHMM = HMM { states=[1,2]
              , outMatrix = omTest
              }
 
+ipTest :: Int -> Prob
 ipTest s
     | s == 1  = 0.1
     | s == 2  = 0.9
 
+tmTest :: Int -> Int -> Prob
 tmTest s1 s2
     | s1==1 && s2==1    = 0.9
     | s1==1 && s2==2    = 0.1
     | s1==2 && s2==1    = 0.5
     | s1==2 && s2==2    = 0.5
 
+omTest :: Int -> Char -> Prob
 omTest s e
     | s==1 && e=='A'    = 0.4
     | s==1 && e=='G'    = 0.1
