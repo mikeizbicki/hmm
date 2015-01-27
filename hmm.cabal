@@ -31,3 +31,4 @@ Library
     Data.HMM
   Other-modules:
     Data.HMMTest
+  GHC-Options:   -Wall
