@@ -1,11 +1,8 @@
-import HMM
+module Data.HMMTest where
 
-import Debug.Trace
+import Data.HMM
 
-   -- | utility functions
-   --
-   -- | takes the cross product of a list multiple times
-   
+
 listCPExp :: [a] -> Int -> [[a]]
 listCPExp language order = listCPExp' order [[]]
     where
@@ -13,15 +10,26 @@ listCPExp language order = listCPExp' order [[]]
             | order == 0    = list
             | otherwise     = listCPExp' (order-1) [symbol:l | l <- list, symbol <- language]
 
-   -- | tests
-                                              
--- these should equal ~1 if our recurrence if alpha and beta are correct
-
+-- | should always equal 1
+forwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
+
+-- | should always equal 1
+backwardtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> Int -> Prob
 backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
 
+-- | should always equal each other
+fbtest ::
+    (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
+    HMM stateType eventType -> [eventType] -> String
 fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
     
+-- | initProbs should always equal 1; the others should equal the number of states
+verifyhmm :: HMM stateType eventType -> IO ()
 verifyhmm hmm = do
         check "initProbs" ip
         check "transMatrix" tm
@@ -36,6 +44,8 @@ verifyhmm hmm = do
          ip = sum $ [initProbs hmm s | s <- states hmm]
          tm = (sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
          om = sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
+
+
 
 -- Test HMMs
 
