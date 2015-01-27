@@ -48,33 +48,42 @@ verifyhmm hmm = do
 
 -- Test HMMs
 
-newHMM :: HMM Int Char
-newHMM = HMM { states=[1,2]
-             , events=['A','G','C','T']
+data State = S1 | S2
+    deriving (Eq, Ord, Show, Bounded, Enum)
+
+data Base = A | G | C | T
+    deriving (Eq, Ord, Show, Bounded, Enum)
+
+newHMM :: HMM State Base
+newHMM = HMM { states=[S1,S2]
+             , events=[A,G,C,T]
              , initProbs = ipTest
              , transMatrix = tmTest
              , outMatrix = omTest
              }
 
-ipTest :: Int -> Prob
-ipTest s
-    | s == 1  = 0.1
-    | s == 2  = 0.9
+ipTest :: State -> Prob
+ipTest s =
+    case s of
+        S1 -> 0.1
+        S2 -> 0.9
 
-tmTest :: Int -> Int -> Prob
-tmTest s1 s2
-    | s1==1 && s2==1    = 0.9
-    | s1==1 && s2==2    = 0.1
-    | s1==2 && s2==1    = 0.5
-    | s1==2 && s2==2    = 0.5
+tmTest :: State -> State -> Prob
+tmTest s1 s2 =
+    case (s1,s2) of
+        (S1,S1) -> 0.9
+        (S1,S2) -> 0.1
+        (S2,S1) -> 0.5
+        (S2,S2) -> 0.5
 
-omTest :: Int -> Char -> Prob
-omTest s e
-    | s==1 && e=='A'    = 0.4
-    | s==1 && e=='G'    = 0.1
-    | s==1 && e=='C'    = 0.1
-    | s==1 && e=='T'    = 0.4
-    | s==2 && e=='A'    = 0.1
-    | s==2 && e=='G'    = 0.4
-    | s==2 && e=='C'    = 0.4
-    | s==2 && e=='T'    = 0.1
+omTest :: State -> Base -> Prob
+omTest s e =
+    case (s,e) of
+        (S1,A) -> 0.4
+        (S1,G) -> 0.1
+        (S1,C) -> 0.1
+        (S1,T) -> 0.4
+        (S2,A) -> 0.1
+        (S2,G) -> 0.4
+        (S2,C) -> 0.4
+        (S2,T) -> 0.1
