@@ -26,7 +26,7 @@ backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
 fbtest ::
     (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
     HMM stateType eventType -> [eventType] -> String
-fbtest hmm events = "fwd: " ++ show (forward hmm events) ++ " bkwd:" ++ show (backward hmm  events)
+fbtest hmm evs = "fwd: " ++ show (forward hmm evs) ++ " bkwd:" ++ show (backward hmm evs)
     
 -- | initProbs should always equal 1; the others should equal the number of states
 verifyhmm :: HMM stateType eventType -> IO ()
