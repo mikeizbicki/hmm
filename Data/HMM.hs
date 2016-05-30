@@ -19,6 +19,7 @@ module Data.HMM
 import Debug.Trace
 import Data.Array
 import Data.List
+import qualified Data.List as L
 import Data.List.Extras (argmax)
 import Data.Number.LogFloat
 import qualified Data.MemoCombinators as Memo
@@ -87,11 +88,11 @@ simpleMM eL order = HMM { states = sL
                         , transMatrix = \s1 -> \s2 -> if (length s1==0) || (isPrefixOf (tail s1) s2)
                                                           then skewedDist s2 --1.0 / (logFloat $ length sL)
                                                           else 0.0
-                        , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                        , outMatrix = \s -> \e -> 1.0/(logFloat $ fromIntegral (length eL))
                         }
                             where evenDist = 1.0 / sLlen
-                                  skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
-                                  sLlen = logFloat $ length sL
+                                  skewedDist s = (logFloat $ 1+ (fromIntegral $ elemIndex2 s sL)) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
+                                  sLlen = logFloat (fromIntegral $ length sL)
                                   sL = fmap reverse $ replicateM (fromIntegral order-1) eL
 
 -- | Use simpleHMM to create an untrained hidden Markov model
@@ -101,11 +102,11 @@ simpleHMM sL eL = HMM { states = sL
                       , events = eL
                       , initProbs = \s -> evenDist--skewedDist s
                       , transMatrix = \s1 -> \s2 -> skewedDist s2
-                      , outMatrix = \s -> \e -> 1.0/(logFloat $ length eL)
+                      , outMatrix = \s -> \e -> 1.0/(logFloat (fromIntegral $ length eL))
                       }
                           where evenDist = 1.0 / sLlen
-                                skewedDist s = (logFloat $ 1+elemIndex2 s sL) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
-                                sLlen = logFloat $ length sL
+                                skewedDist s = (logFloat $ 1+ (fromIntegral $ elemIndex2 s sL)) / ( (sLlen * (sLlen+ (logFloat (1.0 :: Double))))/2.0)
+                                sLlen = logFloat (fromIntegral $ length sL)
                                   
 
 -- | forward algorithm determines the probability that a given event array would be emitted by our HMM
@@ -115,7 +116,7 @@ forward hmm obs = forwardArray hmm (listArray (1,bT) obs)
           bT = length obs
                                
 forwardArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Prob
-forwardArray hmm obs = sum [alpha hmm obs bT state | state <- states hmm]
+forwardArray hmm obs = L.sum [alpha hmm obs bT state | state <- states hmm]
     where
           bT = snd $ bounds obs
                                                          
@@ -131,7 +132,7 @@ alpha hmm obs = memo_alpha
             | t' == 1       = -- trace ("memo_alpha' t'="++show t'++", state'="++show state') $ 
                               (outMatrix hmm (states hmm !! state') $ obs!t')*(initProbs hmm $ states hmm !! state')
             | otherwise     = -- trace ("memo_alpha' t'="++show t'++", state'="++show state') $ 
-                              (outMatrix hmm (states hmm !! state') $ obs!t')*(sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
+                              (outMatrix hmm (states hmm !! state') $ obs!t')*(L.sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
 
    
 -- | backwards algorithm does the same thing as the forward algorithm, just a different implementation
@@ -141,7 +142,7 @@ backward hmm obs = backwardArray hmm $ listArray (1,length obs) obs
 backwardArray :: (Eq eventType, Eq stateType, Show eventType, Show stateType) => HMM stateType eventType -> Array Int eventType -> Prob
 backwardArray hmm obs = backwardArray' hmm obs
     where 
-          backwardArray' hmm obs = sum [(initProbs hmm state)
+          backwardArray' hmm obs = L.sum [(initProbs hmm state)
                                        *(outMatrix hmm state $ obs!1)
                                        *(beta hmm obs 1 state)
                                        | state <- states hmm
@@ -160,7 +161,7 @@ beta hmm obs = memo_beta
             | t' == bT       = -- trace ("memo_alpha' t'="++show t'++", state'="++show state') $ 
                               1
             | otherwise     = -- trace ("memo_alpha' t'="++show t'++", state'="++show state') $ 
-                              sum [(transMatrix hmm (states hmm !! state') state2)
+                              L.sum [(transMatrix hmm (states hmm !! state') state2)
                                   *(outMatrix hmm state2 $ obs!(t'+1))
                                   *(memo_beta (t'+1) state2) 
                                   | state2 <- states hmm
@@ -233,18 +234,18 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
           memo_newTransMatrix2 = (Memo.memo2 Memo.integral Memo.integral memo_newTransMatrix3)
           memo_newTransMatrix3 state1 state2 = newTransMatrix (states hmm !! state1) (states hmm !! state2)
           newTransMatrix state1 state2 = --trace ("newTransMatrix"++(hmmid hmm)) $
-                                         sum [xi t state2 state1 | t <- [2..bT]]
-                                        /sum [gamma t state1 | t <- [2..bT]]
+                                         L.sum [xi t state2 state1 | t <- [2..bT]]
+                                        /L.sum [gamma t state1 | t <- [2..bT]]
           
           memo_newOutMatrix state event = memo_newOutMatrix2 (stateIndex hmm state) (eventIndex hmm event)
           memo_newOutMatrix2 = (Memo.memo2 Memo.integral Memo.integral memo_newOutMatrix3)
           memo_newOutMatrix3 state event = newOutMatrix (states hmm !! state) (events hmm !! event)
-          newOutMatrix state event = sum [if (obs!t == event) 
+          newOutMatrix state event = L.sum [if (obs!t == event) 
                                              then gamma t state 
                                              else 0
                                          | t <- [2..bT]
                                          ]
-                                    /sum [gamma t state | t <- [2..bT]]
+                                    /L.sum [gamma t state | t <- [2..bT]]
                                     
           -- Greek functions, included here for memoization
           xi t state1 state2 = (memo_alpha (t-1) state1)
@@ -263,7 +264,7 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
           memo_beta2 = (Memo.memo2 Memo.integral Memo.integral memo_beta3)
           memo_beta3 t' state'
             | t' == bT      = 1
-            | otherwise     = sum [(transMatrix hmm (states hmm !! state') state2)
+            | otherwise     = L.sum [(transMatrix hmm (states hmm !! state') state2)
                                   *(outMatrix hmm state2 $ obs!(t'+1))
                                   *(memo_beta (t'+1) state2) 
                                   | state2 <- states hmm
@@ -273,7 +274,7 @@ baumWelchItr hmm obs = --par newInitProbs $ par newTransMatrix $ par newOutMatri
           memo_alpha2 = (Memo.memo2 Memo.integral Memo.integral memo_alpha3)
           memo_alpha3 t' state'
             | t' == 1       = (outMatrix hmm (states hmm !! state') $ obs!t')*(initProbs hmm $ states hmm !! state')
-            | otherwise     = (outMatrix hmm (states hmm !! state') $ obs!t')*(sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
+            | otherwise     = (outMatrix hmm (states hmm !! state') $ obs!t')*(L.sum [(memo_alpha (t'-1) state2)*(transMatrix hmm state2 (states hmm !! state')) | state2 <- states hmm])
           
 
 -- | Joins 2 HMMs by connecting every state in the first HMM to every state in the second, and vice versa, with probabilities based on the join ratio
@@ -291,8 +292,8 @@ hmmJoin hmm1 hmm2 ratio = HMM { states = states1 ++ states2
                                                                 else if (s2 `elem` states2 && s2 `elem` states2)
                                                                         then (transMatrix hmm2 (lift s1) (lift s2))*r2
                                                                         else if (s1 `elem` states1)
-                                                                                then (r2)/(logFloat $ length $ states2)
-                                                                                else (r1)/(logFloat $ length $ states1)
+                                                                                then (r2)/(logFloat $ fromIntegral $ length $ states2)
+                                                                                else (r1)/(logFloat $ fromIntegral $ length $ states1)
                               , outMatrix = \s -> if (s `elem` states1)
                                                      then (outMatrix hmm1 $ lift s)
                                                      else (outMatrix hmm2 $ lift s)
@@ -323,13 +324,13 @@ listCPExp language order = listCPExp' order [[]]
 forwardtest ::
     (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
     HMM stateType eventType -> Int -> Prob
-forwardtest hmm x = sum [forward hmm e | e <- listCPExp (events hmm) x]
+forwardtest hmm x = L.sum [forward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal 1
 backwardtest ::
     (Eq stateType, Eq eventType, Show stateType, Show eventType) =>
     HMM stateType eventType -> Int -> Prob
-backwardtest hmm x = sum [backward hmm e | e <- listCPExp (events hmm) x]
+backwardtest hmm x = L.sum [backward hmm e | e <- listCPExp (events hmm) x]
 
 -- | should always equal each other
 fbtest ::
@@ -350,9 +351,9 @@ verifyhmm hmm = do
                     then putStrLn "True"
                     else putStrLn "False"-}
                     
-         ip = sum $ [initProbs hmm s | s <- states hmm]
-         tm = (sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
-         om = sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
+         ip = L.sum $ [initProbs hmm s | s <- states hmm]
+         tm = (L.sum $ [transMatrix hmm s1 s2 | s1 <- states hmm, s2 <- states hmm]) -- (length $ states hmm)
+         om = L.sum $ [outMatrix hmm s e | s <- states hmm, e <- events hmm] -- / length $ states hmm
 
 
 
